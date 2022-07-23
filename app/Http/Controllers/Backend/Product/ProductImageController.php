@@ -13,7 +13,7 @@ class ProductImageController extends Controller
         $image = ProductImage::findorfail($id);
         unlink(public_path('product_images/'.$image->images));
         $image->delete();
-        return back()->with('DeleteSuccess','Image Deleted Successfully!');
+        return "success";
       }
 
       public function addImages(UpdateProductImageRequest $request, $id){

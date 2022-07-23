@@ -1,15 +1,25 @@
 @extends('admin.layout.admin')
 @section('content')  
 @section('title', 'Product')
-<div class="intro-y flex flex-col sm:flex-row items-center mt-8">
+
+<style>
+    .uppy-Dashboard-inner{
+        width: 100% !important;
+    }
+</style>
+<link href="https://releases.transloadit.com/uppy/v2.13.0/uppy.min.css" rel="stylesheet" >
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@8/dist/sweetalert2.min.css">
+<div class="intro-y flex flex-col sm:flex-row items-center mt-8" >
     <h2 class="text-lg font-medium mr-auto">Edit Product - {{$product->name}}</h2>
 </div>
 <!-- Product Information -->
-<div class="intro-y box p-5 mt-5">
-   <form action="{{Route('product.update',$product->id)}}" method="POST">
-        @method('put')
-        @csrf
+<div class="intro-y box p-5 mt-5" id="editProductPage">
+   <form @submit.prevent="processForm">
+        {{-- @method('put')
+        @csrf --}}
         <!-- Product Name Input -->
+        
         <div class="mt-3">
             <div class="input-form"> 
                 <label for="validation-form-1" class="form-label w-full flex flex-col sm:flex-row">
@@ -109,84 +119,154 @@
             </div>
             <div class="text-danger mt-2">@error('description'){{$message}}@enderror</div>
         </div>
-        <!-- Buttons -->
+        <div class="mt-3">
+            <div id="drag-drop-area"></div>
+            <div class="text-danger mt-2"></div>
+        </div>
         <div class="text-right mt-5">
             <a href="{{Route('product.index')}}"><button type="button" class="btn btn-outline-secondary w-24 mr-1">Cancel</button></a>
             <button type="submit" class="btn btn-primary w-24 mt-3">Edit</button>
         </div>
     </form>
 </div>
-<!-- Images Layout -->
-<div class="intro-y box p-5 mt-5">
-    <form action="{{url('addimage/'.$product->id)}}" method="POST" enctype="multipart/form-data">
-        @csrf
-        <div class="mt-3">
-            <label class="form-label w-full flex flex-col sm:flex-row">Product Image</label>
-            <input type="file" name="images[]" placeholder="Choose files" multiple accept="image/*" >
-            <div class="text-danger mt-2">
-                @error('images'){{$message}}@enderror
-            </div>
-             <button type="submit" class="btn btn-primary w-24 mt-3">Add Image </button>
-             
-        </div>
-        <div class="intro-y grid grid-cols-12 gap-6 mt-5" id="datatable">
-            @foreach ($images as $image)
-                <div class="intro-y col-span-12 md:col-span-6 xl:col-span-4 box">
-                    <div class="p-5">
-                        <div>
-                            <img class="object-contain h-48 w-full" src="/product_images/{{$image->images}}"  data-action="zoom" alt="">
-                        </div>
-                        <a href="javascript:;"  class="block font-medium text-center mt-2" id="deleteImage" data-id="{{$image->id}}" data-name="{{$image->images}}">Delete</a> 
-                    </div>
-                </div>
-            @endforeach
-        </div> 
-    </form>
-</div>
-      
-<x-Modal.DeleteModal>
-    <div class="p-5 text-center">
-        <i data-lucide="x-circle" class="w-16 h-16 text-danger mx-auto mt-3"></i> 
-        <div class="text-3xl mt-5">
-            Are you sure? You want to delete this image
-        </div>
-        <div class="text-slate-500 text-2xl	 mt-2">
-            This action cannot be undone
-            <img src id="my_image" alt="" >
-        </div>
-    </div> 
-    <form action method="POST" id="DeleteImageForm">
-        @method('DELETE')
-        @csrf
-        <div class="px-5 pb-8 text-center">
-            <button type="button" data-tw-dismiss="modal" class="btn btn-outline-secondary w-24 mr-1">Cancel</button>
-            <button type="submit" class="btn btn-danger w-24">Delete</button>
-        </div>  
-    </form> 
-</x-Modal.DeleteModal>
+       
+   
 
+      
+
+<script src="https://releases.transloadit.com/uppy/v2.13.0/uppy.min.js"></script>
+<script src="https://unpkg.com/vue@3"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
-$(document).ready(function () {
-    $("#datatable").on("click", "#deleteImage", function () {
-        var id = $(this).data("id");
-        var name = $(this).data("name");
-        $("#my_image").attr("src","/product_images/" + name);
-        $("#DeleteImageForm").attr("action", "/productimage/" + id);
-        const myModal = tailwind.Modal.getInstance(
-            document.querySelector("#delete-confirmation-modal")
-        );
-        myModal.show();
-    });
-});
+    const {createApp} = Vue
+    const editProductPage = createApp({
+        data(){
+            return{
+                uppy:null,
+                images:JSON.parse(`@json($images)`),
+                form:{
+                    UPDATE_PRODUCT_URL: "{{Route('product.update',$product->id)}}",
+                    TOKEN: "{{csrf_token()}}",
+                    errors:{
+                        name:"",
+                        description:"",
+                        category:"",
+                        brand:"",
+                        stock:"",
+                        price:"",
+                        weight:"",
+                        images:""
+                    }
+                }
+            }
+        },
+        mounted(){
+            this.uppy = new Uppy.Core()
+             .use(Uppy.Dashboard, {
+               inline: true,
+               target: '#drag-drop-area',
+               height:250,
+               hideUploadButton: true,
+               locale:{
+                 strings:{
+                     dropPasteFiles: 'Drop product images or %{browseFiles}',
+                     browseFiles: 'browse from your files'
+                 }
+               }})
+               this.uppy.on('file-removed', this.removeImageListener)
+               this.loadImages()
+               
+        },
+        methods:{
+            showErrors(errors){
+                for(const [key, error] of Object.entries(errors)){
+                    this.form.errors[key] = error[0]
+                }   
+            },
+            removeErrors(e){
+                const name = e.target.name
+                this.form.errors[name] = "";
+            },
+            loadImages(){
+                this.images.forEach(image => {
+                    fetch(`/product_images/${image.images}`).then(async(response)=>{
+                        const blob = await response.blob()
+                        this.uppy.addFile({
+                            id: image.id,
+                            image: image.images,
+                            type: blob.type,
+                            data: blob,
+                            meta:{
+                                isUploaded: true,
+                                imageId: image.id
+                            }
+                        })
+                    })  
+                });
+            },
+            async removeImageListener(file, reason){
+                
+               const result = await Swal.fire({
+                    title: 'Are you sure?',
+                    text: "You won't be able to revert this!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Yes, delete it!'
+                })
+                if(result.isConfirmed){
+                       this.deleteImageFromServer(file.meta.imageId)
+                }
+                else{
+                    this.uppy.addFile({
+                            id: file.id,
+                            image: file.name,
+                            type: file.data.type,
+                            data: file.data,
+                            meta: file.meta
+                    })
+                }
+                    
+            },
+            processForm(e){
+                const formData = new FormData(e.target)
+                console.log(this.form.UPDATE_PRODUCT_URL)
+                const files = this.uppy.store.state.files;
+                
+                for(const [key,file] of Object.entries(files)){
+                    if(!file.meta.isUploaded){
+                        formData.append('images[]', file.data, file.data.name)
+                    }
+                }
+                formData.delete('description')
+                formData.append('description', document.querySelector(".ck-content").innerHTML);
+                this.submitUpdates(formData)
+            },
+            async submitUpdates(formData){
+                    formData.append("_method", 'PUT')
+                    const request = await fetch(this.form.UPDATE_PRODUCT_URL,{  
+                    method:"POST",
+                    credentials: "same-origin",
+                    headers: { "X-CSRF-Token": this.form.TOKEN},
+                    body:formData
+                    })
+                    if(!request.ok){
+                     
+                    }  
+          },
+          async deleteImageFromServer(id){
+                    const request = await fetch(`/productimage/${id}`,{  
+                    method:"DELETE",
+                    credentials: "same-origin",
+                    headers: { "X-CSRF-Token": this.form.TOKEN},
+                    })
+          }
+          
+        }
+    }).mount("#editProductPage")
 </script>
-@if(session('SuccessImage'))
-    <x-Notification.SuccessNotification title="Image Saved" message="{{session('SuccessImage')}}"/>
-@endif
-
-@if(session('DeleteSuccess'))
-    <x-Notification.SuccessNotification title="Image Deleted" message="{{session('DeleteSuccess')}}"/>
-@endif
-
 <script src="{{asset('dist/js/ckeditor-classic.js')}}"></script>
 @endsection

@@ -32,6 +32,7 @@ class ProductController extends Controller
       public function store(StoreProductRequest $request){
         $request->validated();
         $archived = $request->boolean('status');
+        
         $new_product = Product::create([
             'name' => $request->name,
             'category_id' => $request->category,
@@ -42,6 +43,7 @@ class ProductController extends Controller
             'status' => $archived,
             'description' => $request->description,
         ]);
+       
         
         if($request->has('images')){
           foreach($request->file('images') as $image){
@@ -53,7 +55,7 @@ class ProductController extends Controller
             ]);
           }
       }
-       return redirect('/product')->with('success', $request->name .' was successfully inserted');
+       return "success";
       }
 
       public function edit($id){
@@ -82,7 +84,18 @@ class ProductController extends Controller
         $product->weight = $request->input('weight');
         $product->description = $request->input('description');
         $product->update();
-        return redirect('/product')->with('ProductEditSuccess', $request->name .' was successfully Edited');
+
+        if($request->has('images')){
+          foreach($request->file('images') as $image){
+            $imageName = time().$image->getClientOriginalName();
+            $image->move(public_path('product_images'),$imageName);
+            ProductImage::create([  
+              'product_id' => $product->id,
+              'images' =>  $imageName,
+            ]);
+          } 
+        }
+        return "success";
       }
       
       public function destroy($id){ 
